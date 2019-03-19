@@ -11,6 +11,7 @@ from shapely.geometry.polygon import Polygon
 import numpy.ma as ma
 import matplotlib.cm as cm
 import diff_classifier.aws as aws
+from itertools import cycle
 
 
 def voronoi_finite_polygons_2d(vor, radius=None):
@@ -75,7 +76,7 @@ def voronoi_finite_polygons_2d(vor, radius=None):
 
                 # Compute the missing endpoint of an infinite ridge
 
-                t = vor.points[p2] - vor.points[p1] # tangent
+                t = vor.points[p2] - vor.points[p1]  # tangent
                 t /= np.linalg.norm(t)
                 n = np.array([-t[1], t[0]])  # normal
 
@@ -89,23 +90,53 @@ def voronoi_finite_polygons_2d(vor, radius=None):
             # sort region counterclockwise
             vs = np.asarray([new_vertices[v] for v in new_region])
             c = vs.mean(axis=0)
-            angles = np.arctan2(vs[:,1] - c[1], vs[:,0] - c[0])
+            angles = np.arctan2(vs[:, 1] - c[1], vs[:, 0] - c[0])
             new_region = np.array(new_region)[np.argsort(angles)]
 
             # finish
             new_regions.append(new_region.tolist())
         except KeyError:
             counter = counter + 1
-            #print('Oops {}'.format(counter))
+            # print('Oops {}'.format(counter))
 
     return new_regions, np.asarray(new_vertices)
 
 
 def plot_heatmap(prefix, feature='asymmetry1', vmin=0, vmax=1, resolution=512, rows=4, cols=4,
-                upload=True, dpi=None, figsize=(12, 10)):
+                 upload=True, dpi=None, figsize=(12, 10), remote_folder = "01_18_Experiment",
+                 bucket='ccurtis.data'):
+    """
+    Plot heatmap of trajectories in video with colors corresponding to features.
 
-    #Inputs
-    #----------
+    Parameters
+    ----------
+    prefix: string
+        Prefix of file name to be plotted e.g. features_P1.csv prefix is P1.
+    feature: string
+        Feature to be plotted.  See features_analysis.py
+    vmin: float64
+        Lower intensity bound for heatmap.
+    vmax: float64
+        Upper intensity bound for heatmap.
+    resolution: int
+        Resolution of base image.  Only needed to calculate bounds of image.
+    rows: int
+        Rows of base images used to build tiled image.
+    cols: int
+        Columns of base images used to build tiled images.
+    upload: boolean
+        True if you want to upload to s3.
+    dpi: int
+        Desired dpi of output image.
+    figsize: list
+        Desired dimensions of output image.
+
+    Returns
+    -------
+
+    """
+    # Inputs
+    # ----------
     merged_ft = pd.read_csv('features_{}.csv'.format(prefix))
     string = feature
     leveler = merged_ft[string]
@@ -113,8 +144,8 @@ def plot_heatmap(prefix, feature='asymmetry1', vmin=0, vmax=1, resolution=512, r
     t_max = vmax
     ires = resolution
 
-    #Building points and color schemes
-    #----------
+    # Building points and color schemes
+    # ----------
     zs = ma.masked_invalid(merged_ft[string])
     zs = ma.masked_where(zs <= t_min, zs)
     zs = ma.masked_where(zs >= t_max, zs)
@@ -157,23 +188,45 @@ def plot_heatmap(prefix, feature='asymmetry1', vmin=0, vmax=1, resolution=512, r
 
     mapper.set_array(10)
     plt.colorbar(mapper)
-    plt.xlim(531, 875)
-    plt.ylim(-0.6, 344)
+    plt.xlim(0, ires*cols)
+    plt.ylim(0, ires*rows)
     plt.axis('off')
 
     print('Plotted {} heatmap successfully.'.format(prefix))
     outfile = 'hm_{}_{}.png'.format(feature, prefix)
-    remote_folder = "01_18_Experiment/{}".format(prefix.split('_')[0])
     fig.savefig(outfile, bbox_inches='tight')
-    if upload==True:
-        aws.upload_s3(outfile, remote_folder+'/'+outfile)
+    if upload == True:
+        aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
 
 
 def plot_scatterplot(prefix, feature='asymmetry1', vmin=0, vmax=1, resolution=512, rows=4, cols=4,
-                     upload=True):
+                     dotsize=10, figsize=(12, 10), upload=True, remote_folder = "01_18_Experiment",
+                     bucket='ccurtis.data'):
+    """
+    Plot scatterplot of trajectories in video with colors corresponding to features.
 
-    #Inputs
-    #----------
+    Parameters
+    ----------
+    prefix: string
+        Prefix of file name to be plotted e.g. features_P1.csv prefix is P1.
+    feature: string
+        Feature to be plotted.  See features_analysis.py
+    vmin: float64
+        Lower intensity bound for heatmap.
+    vmax: float64
+        Upper intensity bound for heatmap.
+    resolution: int
+        Resolution of base image.  Only needed to calculate bounds of image.
+    rows: int
+        Rows of base images used to build tiled image.
+    cols: int
+        Columns of base images used to build tiled images.
+    upload: boolean
+        True if you want to upload to s3.
+
+    """
+    # Inputs
+    # ----------
     merged_ft = pd.read_csv('features_{}.csv'.format(prefix))
     string = feature
     leveler = merged_ft[string]
@@ -192,8 +245,8 @@ def plot_scatterplot(prefix, feature='asymmetry1', vmin=0, vmax=1, resolution=51
     xs = ma.compressed(ma.masked_where(to_mask, merged_ft['X'].astype(int)))
     ys = ma.compressed(ma.masked_where(to_mask, merged_ft['Y'].astype(int)))
 
-    fig = plt.figure(figsize=(12, 10))
-    plt.scatter(xs, ys, c=zs, s=10)
+    fig = plt.figure(figsize=figsize)
+    plt.scatter(xs, ys, c=zs, s=dotsize)
     mapper.set_array(10)
     plt.colorbar(mapper)
     plt.xlim(0, ires*cols)
@@ -201,55 +254,90 @@ def plot_scatterplot(prefix, feature='asymmetry1', vmin=0, vmax=1, resolution=51
     plt.axis('off')
 
     print('Plotted {} scatterplot successfully.'.format(prefix))
-    outfile = 'scatter_{}.png'.format(prefix)
-    remote_folder = "01_18_Experiment/{}".format(prefix.split('_')[0])
+    outfile = 'scatter_{}_{}.png'.format(feature, prefix)
     fig.savefig(outfile, bbox_inches='tight')
-    if upload==True:
-        aws.upload_s3(outfile, remote_folder+'/'+outfile)
+    if upload == True:
+        aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
 
-def convert(x):
-    return 0.16*x
-def shift(x):
-    return x-85
 
-def plot_trajectories(prefix, resolution=512, rows=4, cols=4, upload=True):
-    hfont = {'fontname':'Arial'}
+def plot_trajectories(prefix, resolution=512, rows=4, cols=4, upload=True, 
+                      remote_folder = "01_18_Experiment", bucket='ccurtis.data',
+                      figsize=(12, 12)):
+    """
+    Plot trajectories in video.
+
+    Parameters
+    ----------
+    prefix: string
+        Prefix of file name to be plotted e.g. features_P1.csv prefix is P1.
+    resolution: int
+        Resolution of base image.  Only needed to calculate bounds of image.
+    rows: int
+        Rows of base images used to build tiled image.
+    cols: int
+        Columns of base images used to build tiled images.
+    upload: boolean
+        True if you want to upload to s3.
+
+    """
     merged = pd.read_csv('msd_{}.csv'.format(prefix))
-    merged["X"] = merged["X"].apply(convert)
-    merged["X"] = merged["X"].apply(shift)
-    merged["Y"] = merged["Y"].apply(convert)
     particles = int(max(merged['Track_ID']))
     ires = resolution
-
-    fig = plt.figure(figsize=(12, 12))
-    ax = fig.add_subplot(111)
+    
+    cycol = cycle('bgrcmk')
+    fig = plt.figure(figsize=figsize)
     for part in range(0, particles):
-        x = merged[merged['Track_ID']==part]['X']
-        y = merged[merged['Track_ID']==part]['Y']
-        ax.plot(x, y, color='k', alpha=0.7)
+        x = merged[merged['Track_ID'] == part]['X']
+        y = merged[merged['Track_ID'] == part]['Y']
+        plt.plot(x, y, color=cycol.next(), alpha=0.7)
 
-    ax.set_xlim(-0.1, 55)
-    ax.set_ylim(-0.1, 55)
-    ax.tick_params(axis='both', which='major', labelsize=35)
-    ax.xaxis.set_tick_params(width = 5, length = 10)
-    ax.yaxis.set_tick_params(width = 5, length = 10)
-    plt.xlabel('x ($\mu$$m$)', fontsize=50,**hfont)
-    plt.ylabel('y ($\mu$$m$)', fontsize=50,**hfont)
+    plt.xlim(0, ires*cols)
+    plt.ylim(0, ires*rows)
+    plt.axis('off')
+
     print('Plotted {} trajectories successfully.'.format(prefix))
     outfile = 'traj_{}.png'.format(prefix)
-    remote_folder = "01_18_Experiment/{}".format(prefix.split('_')[0])
     fig.savefig(outfile, bbox_inches='tight')
-    if upload==True:
-        aws.upload_s3(outfile, remote_folder+'/'+outfile)
+    if upload == True:
+        aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
 
 
 def plot_histogram(prefix, xlabel='Log Diffusion Coefficient Dist', ylabel='Trajectory Count',
                    fps=100.02, umppx=0.16, frames=651, y_range=100, frame_interval=20, frame_range=100,
-                   analysis='log', theta='D', upload=True):
+                   analysis='log', theta='D', upload=True, remote_folder = "01_18_Experiment",
+                   bucket='ccurtis.data'):
+    """
+    Plot heatmap of trajectories in video with colors corresponding to features.
 
+    Parameters
+    ----------
+    prefix: string
+        Prefix of file name to be plotted e.g. features_P1.csv prefix is P1.
+    xlabel: string
+        X axis label.
+    ylabel: string
+        Y axis label.
+    fps: float64
+        Frames per second of video.
+    umppx: float64
+        Resolution of video in microns per pixel.
+    frames: int
+        Number of frames in video.
+    y_range: float64 or int
+        Desire y range of graph.
+    frame_interval: int
+        Desired spacing between MSDs/Deffs to be plotted.
+    analysis: string
+        Desired output format.  If log, will plot log(MSDs/Deffs)
+    theta: string
+        Desired output.  D for diffusion coefficients.  Anything else, MSDs.
+    upload: boolean
+        True if you want to upload to s3.
+
+    """
     merged = pd.read_csv('msd_{}.csv'.format(prefix))
     data = merged
-    frame_range=range(frame_interval, frame_range+frame_interval, frame_interval)
+    frame_range = range(frame_interval, frame_range+frame_interval, frame_interval)
 
     # load data
 
@@ -306,14 +394,28 @@ def plot_histogram(prefix, xlabel='Log Diffusion Coefficient Dist', ylabel='Traj
 
         plt.legend(fontsize=20, frameon=False)
     outfile = 'hist_{}.png'.format(prefix)
-    remote_folder = "01_18_Experiment/{}".format(prefix.split('_')[0])
     fig.savefig(outfile, bbox_inches='tight')
     if upload==True:
-        aws.upload_s3(outfile, remote_folder+'/'+outfile)
+        aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
 
 
-def plot_particles_in_frame(prefix, x_range=600, y_range=2000, upload=True):
+def plot_particles_in_frame(prefix, x_range=600, y_range=2000, upload=True,
+                            remote_folder = "01_18_Experiment", bucket='ccurtis.data'):
+    """
+    Plot number of particles per frame as a function of time.
 
+    Parameters
+    ----------
+    prefix: string
+        Prefix of file name to be plotted e.g. features_P1.csv prefix is P1.
+    x_range: float64 or int
+        Desire x range of graph.
+    y_range: float64 or int
+        Desire y range of graph.
+    upload: boolean
+        True if you want to upload to s3.
+
+    """
     merged = pd.read_csv('msd_{}.csv'.format(prefix))
     frames = int(max(merged['Frame']))
     framespace = np.linspace(0, frames, frames)
@@ -329,17 +431,45 @@ def plot_particles_in_frame(prefix, x_range=600, y_range=2000, upload=True):
     plt.ylabel('Particles', fontsize=20)
 
     outfile = 'in_frame_{}.png'.format(prefix)
-    remote_folder = "01_18_Experiment/{}".format(prefix.split('_')[0])
     fig.savefig(outfile, bbox_inches='tight')
-    if upload==True:
-        aws.upload_s3(outfile, remote_folder+'/'+outfile)
+    if upload == True:
+        aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
 
 
-def plot_individual_msds(prefix, x_range=100, y_range=20, umppx=0.16, fps = 100.02, alpha=0.01, upload=True, folder='.'):
+def plot_individual_msds(prefix, x_range=100, y_range=20, umppx=0.16, fps=100.02, alpha=0.01, folder='.', upload=True,
+                         remote_folder="01_18_Experiment", bucket='ccurtis.data', figsize=(10, 10)):
+    """
+    Plot MSDs of trajectories and the geometric average.
+
+    Parameters
+    ----------
+    prefix: string
+        Prefix of file name to be plotted e.g. features_P1.csv prefix is P1.
+    x_range: float64 or int
+        Desire x range of graph.
+    y_range: float64 or int
+        Desire y range of graph.
+    fps: float64
+        Frames per second of video.
+    umppx: float64
+        Resolution of video in microns per pixel.
+    alpha: float64
+        Transparency factor.  Between 0 and 1.
+    upload: boolean
+        True if you want to upload to s3.
+
+    Returns
+    -------
+    geo_mean: numpy array
+        Geometric mean of trajectory MSDs at all time points.
+    geo_SEM: numpy array
+        Geometric standard errot of trajectory MSDs at all time points.
+
+    """
 
     merged = pd.read_csv('{}/msd_{}.csv'.format(folder, prefix))
 
-    fig = plt.figure(figsize=(10, 10))
+    fig = plt.figure(figsize=figsize)
     particles = int(max(merged['Track_ID']))
     frames = int(max(merged['Frame']))
     y = np.zeros((particles+1, frames+1))
@@ -353,20 +483,19 @@ def plot_individual_msds(prefix, x_range=100, y_range=20, umppx=0.16, fps = 100.
     plt.plot(x, np.exp(geo_mean), 'k', linewidth=4)
     plt.plot(x, np.exp(geo_mean-geo_SEM), 'k--', linewidth=2)
     plt.plot(x, np.exp(geo_mean+geo_SEM), 'k--', linewidth=2)
-    plt.xlim(0, 1)
-    plt.ylim(0, 20)
+    plt.xlim(0, x_range)
+    plt.ylim(0, y_range)
     plt.xlabel('Tau (s)', fontsize=25)
-    plt.ylabel(r'Mean Squared Displacement ($\mu$m$^2$/s)', fontsize=25)
+    plt.ylabel(r'Mean Squared Displacement ($\mu$m$^2$)', fontsize=25)
 
     outfile = '{}/msds_{}.png'.format(folder, prefix)
     outfile2 = '{}/geomean_{}.csv'.format(folder, prefix)
     outfile3 = '{}/geoSEM_{}.csv'.format(folder, prefix)
-    remote_folder = "01_18_Experiment/{}".format(prefix.split('_')[0])
     fig.savefig(outfile, bbox_inches='tight')
     np.savetxt(outfile2, geo_mean, delimiter=",")
     np.savetxt(outfile3, geo_SEM, delimiter=",")
     if upload==True:
-        aws.upload_s3(outfile, remote_folder+'/'+outfile)
-        aws.upload_s3(outfile2, remote_folder+'/'+outfile2)
-        aws.upload_s3(outfile3, remote_folder+'/'+outfile3)
+        aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
+        aws.upload_s3(outfile2, remote_folder+'/'+outfile2, bucket_name=bucket)
+        aws.upload_s3(outfile3, remote_folder+'/'+outfile3, bucket_name=bucket)
     return geo_mean, geo_SEM

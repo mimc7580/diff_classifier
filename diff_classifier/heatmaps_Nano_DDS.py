@@ -290,7 +290,7 @@ def plot_trajectories(prefix, resolution=512, rows=4, cols=4, upload=True,
 
     plt.xlim(0, ires*cols)
     plt.ylim(0, ires*2)
-    plt.axis('off')
+    plt.axis('on')
 
     print('Plotted {} trajectories successfully.'.format(prefix))
     outfile = 'traj_{}.png'.format(prefix)

@@ -289,7 +289,7 @@ def plot_trajectories(prefix, resolution=512, rows=4, cols=4, upload=True,
     for part in range(0, particles):
         x = merged[merged['Track_ID'] == part]['X']
         y = merged[merged['Track_ID'] == part]['Y']
-        plt.plot(x, y, color=cycol.next(), alpha=0.7)
+        plt.plot(x, y, color='k', alpha=0.7)
 
     plt.xlim(0, ires*cols)
     plt.ylim(0, ires*rows)
