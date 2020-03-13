@@ -175,7 +175,7 @@ def track(target, out_file, template=None, fiji_bin=None,
                             linking_max_distance=str(tparams['linking_max_distance']),
                             gap_closing_max_distance=str(tparams['gap_closing_max_distance']),
                             max_frame_gap=str(tparams['max_frame_gap']),
-                            track_duration=str(tparams['track_duration'])))
+                            track_duration=str(tparams['track_duration']))
     fid.close()
     cmd = "%s --ij2 --headless --run %s" % (fiji_bin, tpfile.name)
     print(cmd)
