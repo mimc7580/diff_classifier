@@ -36,6 +36,7 @@ def split(prefix, remote_folder, bucket='nancelab.publicfiles',
     import boto3
     import diff_classifier.aws as aws
     import diff_classifier.imagej as ij
+    import diff_classifier.imagej_v2 as ij2
 
     local_folder = os.getcwd()
     filename = '{}.tif'.format(prefix)
@@ -112,6 +113,7 @@ def tracking(subprefix, remote_folder, bucket='nancelab.publicfiles',
     import diff_classifier.msd as msd
     import diff_classifier.features as ft
     import diff_classifier.imagej as ij
+    import diff_classifier.imagej_v2 as ij2
 
     local_folder = os.getcwd()
     filename = '{}.tif'.format(subprefix)
@@ -140,7 +142,7 @@ def tracking(subprefix, remote_folder, bucket='nancelab.publicfiles',
         if row == rows-1:
             tparams['ydims'] = (tparams['ydims'][0], ires[1] - 27)
 
-        ij.track(local_im, outfile, template=None, fiji_bin=None,
+        ij2.track(local_im, outfile, template=None, fiji_bin=None,
                  tparams=tparams)
         aws.upload_s3(outfile, remote_folder+'/'+outfile, bucket_name=bucket)
     print("Done with tracking.  Should output file of name {}".format(
